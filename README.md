@@ -1,8 +1,18 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a small task manager built with Next.js App Router, Prisma, and a local
+SQLite database.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and initialize the local database:
+
+```bash
+npm install
+copy .env.example .env
+npx prisma migrate dev --name init
+npx prisma generate
+```
+
+Run the development server:
 
 ```bash
 npm run dev
@@ -14,7 +24,18 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser. Tasks are
+stored in the local `dev.db` file and remain available after a refresh.
+
+The API supports `GET` and `POST /api/tasks`, plus `PATCH` and `DELETE
+/api/tasks/{id}`. Every response, including errors, is JSON.
+
+Before considering a change complete, run:
+
+```bash
+npm run lint
+npm run build
+```
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

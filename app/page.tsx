@@ -1,69 +1,217 @@
-import Image from "next/image";
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+
+type TaskPriority = "HIGH" | "MEDIUM" | "LOW";
+
+type Task = {
+  id: string;
+  title: string;
+  completed: boolean;
+  priority: TaskPriority;
+  createdAt: string;
+};
+
+type ErrorResponse = {
+  error?: { message?: string };
+};
+
+const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  HIGH: "높음",
+  MEDIUM: "보통",
+  LOW: "낮음",
+};
+
+const PRIORITY_WEIGHT: Record<TaskPriority, number> = {
+  HIGH: 0,
+  MEDIUM: 1,
+  LOW: 2,
+};
 
 export default function Home() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+
+  async function loadTasks() {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/tasks");
+      const body = (await response.json()) as { tasks?: Task[] } & ErrorResponse;
+      if (!response.ok || !body.tasks) {
+        throw new Error(body.error?.message ?? "할 일을 불러오지 못했습니다.");
+      }
+      setTasks(body.tasks);
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "할 일을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadTasks();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  async function addTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setMessage("할 일 제목을 입력해 주세요.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmedTitle, priority }),
+      });
+      const body = (await response.json()) as { task?: Task } & ErrorResponse;
+      if (!response.ok || !body.task) {
+        throw new Error(body.error?.message ?? "할 일을 추가하지 못했습니다.");
+      }
+      setTasks((currentTasks) =>
+        [body.task as Task, ...currentTasks].sort(
+          (a, b) => PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority],
+        ),
+      );
+      setTitle("");
+      setMessage("할 일을 추가했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "할 일을 추가하지 못했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggleTask(task: Task) {
+    setBusyTaskId(task.id);
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: !task.completed }),
+      });
+      const body = (await response.json()) as { task?: Task } & ErrorResponse;
+      if (!response.ok || !body.task) {
+        throw new Error(body.error?.message ?? "상태를 변경하지 못했습니다.");
+      }
+      setTasks((currentTasks) =>
+        currentTasks.map((currentTask) =>
+          currentTask.id === task.id ? (body.task as Task) : currentTask,
+        ),
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "상태를 변경하지 못했습니다.");
+    } finally {
+      setBusyTaskId(null);
+    }
+  }
+
+  async function deleteTask(task: Task) {
+    setBusyTaskId(task.id);
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      const body = (await response.json()) as { deleted?: boolean } & ErrorResponse;
+      if (!response.ok || !body.deleted) {
+        throw new Error(body.error?.message ?? "할 일을 삭제하지 못했습니다.");
+      }
+      setTasks((currentTasks) => currentTasks.filter((currentTask) => currentTask.id !== task.id));
+      setMessage("할 일을 삭제했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "할 일을 삭제하지 못했습니다.");
+    } finally {
+      setBusyTaskId(null);
+    }
+  }
+
+  const completedCount = tasks.filter((task) => task.completed).length;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="page-shell">
+      <section className="todo-app" aria-labelledby="page-title">
+        <header className="hero">
+          <p className="eyebrow">DAILY / FOCUS</p>
+          <h1 id="page-title">오늘의 할 일</h1>
+          <p className="subtitle">작은 약속을 적고, 하나씩 끝내보세요.</p>
+          <div className="progress-row" aria-label={`전체 ${tasks.length}개 중 ${completedCount}개 완료`}>
+            <span>{completedCount} / {tasks.length} 완료</span>
+            <span className="progress-track"><span style={{ width: tasks.length ? `${(completedCount / tasks.length) * 100}%` : "0%" }} /></span>
+          </div>
+        </header>
+
+        <form className="task-form" onSubmit={addTask}>
+          <label className="sr-only" htmlFor="task-title">할 일 제목</label>
+          <input
+            id="task-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="새로운 할 일을 적어보세요"
+            maxLength={200}
+          />
+          <label className="sr-only" htmlFor="task-priority">중요도</label>
+          <select
+            id="task-priority"
+            className="priority-select"
+            value={priority}
+            onChange={(event) => setPriority(event.target.value as TaskPriority)}
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            <option value="HIGH">높음</option>
+            <option value="MEDIUM">보통</option>
+            <option value="LOW">낮음</option>
+          </select>
+          <button type="submit" disabled={submitting}>
+            {submitting ? "추가 중" : "추가"}
+          </button>
+        </form>
+
+        <div className="status-line" role="status" aria-live="polite">{message}</div>
+
+        <section className="task-list" aria-label="할 일 목록">
+          {loading ? (
+            <p className="empty-state">목록을 불러오는 중입니다...</p>
+          ) : tasks.length === 0 ? (
+            <div className="empty-state">
+              <span className="empty-mark">○</span>
+              <p>아직 적어둔 일이 없어요.</p>
+              <span>위 입력창에 첫 번째 할 일을 남겨보세요.</span>
+            </div>
+          ) : (
+            tasks.map((task) => (
+              <article className={`task-item ${task.completed ? "is-complete" : ""}`} key={task.id}>
+                <button
+                  className="check-button"
+                  type="button"
+                  onClick={() => void toggleTask(task)}
+                  disabled={busyTaskId === task.id}
+                  aria-label={task.completed ? `${task.title} 완료 해제` : `${task.title} 완료 처리`}
+                  aria-pressed={task.completed}
+                >
+                  {task.completed ? "✓" : ""}
+                </button>
+                <span className="task-title">{task.title}</span>
+                <span className={`priority-badge priority-${task.priority.toLowerCase()}`}>
+                  {PRIORITY_LABELS[task.priority]}
+                </span>
+                <button className="delete-button" type="button" onClick={() => void deleteTask(task)} disabled={busyTaskId === task.id} aria-label={`${task.title} 삭제`}>
+                  삭제
+                </button>
+              </article>
+            ))
+          )}
+        </section>
+      </section>
+    </main>
   );
 }
